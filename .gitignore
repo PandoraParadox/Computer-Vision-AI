@@ -1,1 +1,15 @@
+# Bỏ model nặng
 weights/*.pth
+
+# Dataset
+data/
+*.zip
+*.tar.gz
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual env
+venv/
+.env
