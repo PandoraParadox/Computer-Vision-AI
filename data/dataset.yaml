@@ -1,0 +1,4 @@
+train: data/images/train
+val: data/images/val
+nc: 6
+names: ['car', 'threewheel', 'bus', 'truck', 'motorbike', 'van']
