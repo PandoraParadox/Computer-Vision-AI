@@ -60,7 +60,7 @@ class TestDataset:
             print(f"Lỗi khi load ảnh {img_path}: {str(e)}")
             return None, img_path
 
-def load_model(model_path, num_classes=53, device='cpu'):
+def load_model(model_path, num_classes=3, device='cpu'):
     print(f"Đang load model từ {model_path}...")
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Không tìm thấy file model: {model_path}")
@@ -165,7 +165,7 @@ def main():
     output_file = "predictions.csv"
     batch_size = 8
     img_size = 128
-    num_classes = 53
+    num_classes = 3
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Sử dụng device: {device}")
     class_names = load_class_names(train_dir)

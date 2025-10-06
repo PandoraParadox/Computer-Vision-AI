@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 
 class ClassificationLoss(nn.Module):
-    def __init__(self, num_classes=53, label_smoothing=0.0, class_weights=None):
+    def __init__(self, num_classes=3, label_smoothing=0.0, class_weights=None):
         super().__init__()
         self.num_classes = num_classes
         self.label_smoothing = label_smoothing
@@ -20,9 +20,6 @@ class ClassificationLoss(nn.Module):
             reduction='mean'
         )
         
-        self.loss_history = []
-        self.max_history = 50
-        
     def forward(self, outputs, targets):
         device = outputs.device
         batch_size = outputs.size(0)
@@ -33,10 +30,8 @@ class ClassificationLoss(nn.Module):
             cls_loss = self.cross_entropy(outputs, targets)
             cls_loss = torch.clamp(cls_loss, 0.0, 10.0)
         except Exception as e:
-            print(f"Lỗi tính loss: {e}")
+            print(f"Loss calculate error: {e}")
             cls_loss = self._fallback_loss_calculation(outputs, targets)
-        
-        self._update_loss_history(cls_loss.item())
         
         total_loss = cls_loss
         box_loss = torch.tensor(0.0, device=device)
@@ -62,13 +57,8 @@ class ClassificationLoss(nn.Module):
             nll_loss = F.nll_loss(log_probs, targets, reduction='mean')
             return torch.clamp(nll_loss, 0.0, 8.0)
         except:
-            print("Sử dụng fallback loss cuối cùng")
             return torch.tensor(2.0, device=outputs.device, requires_grad=True)
     
-    def _update_loss_history(self, loss_value):
-        self.loss_history.append(loss_value)
-        if len(self.loss_history) > self.max_history:
-            self.loss_history.pop(0)
     
     def calculate_accuracy(self, outputs, targets):
         try:
@@ -87,14 +77,3 @@ class ClassificationLoss(nn.Module):
         except:
             return 0.0
     
-    def get_loss_stats(self):
-        if len(self.loss_history) < 2:
-            return {}
-        
-        return {
-            'mean': np.mean(self.loss_history),
-            'std': np.std(self.loss_history),
-            'min': np.min(self.loss_history),
-            'max': np.max(self.loss_history),
-            'recent': self.loss_history[-1] if self.loss_history else 0.0
-        }

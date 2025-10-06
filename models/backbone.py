@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import numpy as np
 class ClassificationModel(nn.Module):
-    def __init__(self, num_classes: int = 53):
+    def __init__(self, num_classes: int = 3):
         super().__init__()
         self.num_classes = num_classes
         
@@ -51,19 +51,14 @@ class ClassificationModel(nn.Module):
     def forward(self, x):
         x = torch.clamp(x, -3, 3)
         x = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
-        
         x = self.features(x)
-        
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x = self.classifier(x)
-        
         x = torch.clamp(x, -5, 5)
-        
         return x
 
 class ResidualBlock(nn.Module):
-    """Khối residual để cải thiện gradient flow"""
     def __init__(self, in_channels, out_channels, stride=1):
         super().__init__()
         
@@ -82,24 +77,19 @@ class ResidualBlock(nn.Module):
     
     def forward(self, x):
         residual = x
-        
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
-        
         out = self.conv2(out)
         out = self.bn2(out)
-        
         residual = self.skip_connection(residual)
-        
         out += residual
         out = self.relu(out)
         
         return out
 
 class ResNetClassifier(nn.Module):
-    """Mô hình ResNet để gradient flow tốt hơn"""
-    def __init__(self, num_classes: int = 53, dropout_rate: float = 0.1):
+    def __init__(self, num_classes: int = 3, dropout_rate: float = 0.1):
         super().__init__()
         self.num_classes = num_classes
         
@@ -160,70 +150,75 @@ class ResNetClassifier(nn.Module):
         
         return x
 
-def create_stable_model(model_type='simple', num_classes=53, dropout_rate=0.2):
-    if model_type == 'simple':
-        return ClassificationModel(num_classes)
-    elif model_type == 'resnet':
-        return ResNetClassifier(num_classes, dropout_rate)
-    elif model_type == 'stable':
-        return ClassificationModel(num_classes)
-    else:
-        raise ValueError(f"Loại mô hình không xác định: {model_type}")
+class VGG11Classifier(nn.Module):
+    def __init__(self, num_classes: int = 3, dropout_rate: float = 0.5):
+        super().__init__()
+        self.num_classes = num_classes
 
-def test_model_stability(model, device='cpu', num_tests=10):
-    model.eval()
-    model.to(device)
-    
-    print(f"Kiểm tra độ ổn định mô hình trên {device}...")
-    
-    gradient_norms = []
-    output_ranges = []
-    
-    for i in range(num_tests):
-        x = torch.randn(4, 1, 128, 128, device=device) * 0.5  # Sử dụng kích thước 128
-        target = torch.randint(0, model.num_classes, (4,), device=device)
-        
-        model.train()
-        x.requires_grad_(True)
-        
-        output = model(x)
-        loss = F.cross_entropy(output, target)
-        
-        model.zero_grad()
-        loss.backward()
-        
-        total_norm = 0
-        for p in model.parameters():
-            if p.grad is not None:
-                param_norm = p.grad.data.norm(2)
-                total_norm += param_norm.item() ** 2
-        total_norm = total_norm ** 0.5
-        
-        gradient_norms.append(total_norm)
-        output_ranges.append((output.min().item(), output.max().item()))
-        
-        print(f"Test {i+1}: Loss={loss.item():.4f}, GradNorm={total_norm:.4f}, "
-              f"OutputRange=[{output.min().item():.2f}, {output.max().item():.2f}]")
-    
-    print(f"\nTóm tắt độ ổn định:")
-    print(f"Norm gradient trung bình: {np.mean(gradient_norms):.4f}")
-    print(f"Norm gradient tối đa: {np.max(gradient_norms):.4f}")
-    print(f"Độ lệch chuẩn gradient: {np.std(gradient_norms):.4f}")
-    
-    if np.max(gradient_norms) > 50:
-        print("⚠️ CẢNH BÁO: Phát hiện gradient nổ!")
-    elif np.max(gradient_norms) < 0.01:
-        print("⚠️ CẢNH BÁO: Phát hiện gradient biến mất!")
-    else:
-        print("✅ Mô hình ổn định!")
-    
-    return gradient_norms, output_ranges
+        self.features = nn.Sequential(
+            nn.Conv2d(1, 64, kernel_size=3, padding=1), 
+            nn.MaxPool2d(kernel_size=2, stride=2),
 
-if __name__ == "__main__":
-    import numpy as np
-    for model_type in ['simple', 'resnet', 'stable']:
-        print(f"\n{'='*50}")
-        print(f"Kiểm tra mô hình {model_type}")
-        print(f"{'='*50}")
-        model = create_stable_model(model_type, num_classes=53)
-        test_model_stability(model, device='cpu', num_tests=5)
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            nn.Conv2d(256, 512, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+        )
+
+        self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
+
+        self.classifier = nn.Sequential(
+            nn.Linear(512 * 7 * 7, 4096),
+            nn.ReLU(True),
+            nn.Dropout(dropout_rate),
+            nn.Linear(4096, 4096),
+            nn.ReLU(True),
+            nn.Dropout(dropout_rate),
+            nn.Linear(4096, num_classes),
+        )
+
+        self._init_weights()
+
+    def _init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        x = torch.clamp(x, -3, 3)
+        x = torch.nan_to_num(x, nan=0.0, posinf=1.0, neginf=-1.0)
+
+        x = self.features(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.classifier(x)
+
+        x = torch.clamp(x, -8, 8)
+        return x
+
+

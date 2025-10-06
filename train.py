@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 from torch import nn, optim
 import numpy as np
 from data.dataset import ClassificationDataset, improved_collate_fn
-from models.backbone import ClassificationModel
+from models.backbone import ClassificationModel, ResNetClassifier, VGG11Classifier
 from models.loss import ClassificationLoss
 import warnings
 warnings.filterwarnings('ignore')
@@ -14,9 +14,9 @@ CONFIG = {
     'VAL_SPLIT': 0.2,
     'EPOCHS': 100,
     'BATCH_SIZE': 4,  
-    'LEARNING_RATE': 1e-5,  
+    'LEARNING_RATE': 1e-5, 
     'IMG_SIZE': 128,  
-    'NUM_CLASSES': 53,
+    'NUM_CLASSES': 3,
     'DEVICE': 'cuda' if torch.cuda.is_available() else 'cpu',
     'SAVE_DIR': 'weights',
     'NUM_WORKERS': 2,  
@@ -24,6 +24,7 @@ CONFIG = {
     'GRADIENT_CLIP': 5.0,  
     'WARMUP_EPOCHS': 5,
 }
+
 
 def get_learning_rate(epoch, base_lr, warmup_epochs):
     if epoch < warmup_epochs:
@@ -167,7 +168,7 @@ def validate_model(model, val_loader, criterion, device):
 
 def main():
     os.makedirs(CONFIG['SAVE_DIR'], exist_ok=True)
-
+    
     full_dataset = ClassificationDataset(
         root_dir=CONFIG['TRAIN_DIR'],
         num_classes=CONFIG['NUM_CLASSES'],
@@ -191,6 +192,7 @@ def main():
 
     class_weights = full_dataset.get_class_weights()
 
+    
     train_loader = DataLoader(
         train_dataset,
         batch_size=CONFIG['BATCH_SIZE'],
@@ -209,11 +211,9 @@ def main():
         num_workers=CONFIG['NUM_WORKERS'],
         pin_memory=True if CONFIG['DEVICE'] == 'cuda' else False
     )
-
+    
     model = ClassificationModel(CONFIG['NUM_CLASSES'])
     model.to(CONFIG['DEVICE'])
-    
-    print(f"Model create with {sum(p.numel() for p in model.parameters())} parameters")
     
     criterion = ClassificationLoss(
         num_classes=CONFIG['NUM_CLASSES'],
@@ -245,9 +245,10 @@ def main():
         
         if train_loss == 0.0:
             print("Không có tiến độ huấn luyện, dừng lại...")
+            torch.save(model.state_dict(), os.path.join(CONFIG['SAVE_DIR'], 'best_model.pth'))
+
             break
         
-        # Validation mỗi 5 epoch hoặc epoch cuối
         if (epoch + 1) % 5 == 0 or epoch == CONFIG['EPOCHS'] - 1:
             val_loss, val_acc = validate_model(model, val_loader, criterion, CONFIG['DEVICE'])
             print(f"Validation - Loss: {val_loss:.4f}, Accuracy: {val_acc*100:.2f}%")
@@ -293,8 +294,8 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("Stop traning")
+        print("\nHuấn luyện bị gián đoạn bởi người dùng")
     except Exception as e:
-        print(f"Traning fail: {e}")
+        print(f"\nHuấn luyện thất bại: {e}")
         import traceback
         traceback.print_exc()

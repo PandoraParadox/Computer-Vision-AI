@@ -8,7 +8,7 @@ from torchvision import transforms
 
 
 class ClassificationDataset(Dataset):
-    def __init__(self, root_dir: str, num_classes: int = 53, img_exts=(".jpg", ".jpeg", ".png", ".bmp"),transform=None, augment=True, img_size=128):
+    def __init__(self, root_dir: str, num_classes: int = 1, img_exts=(".jpg", ".jpeg", ".png", ".bmp"),transform=None, augment=True, img_size=128):
         self.root_dir = root_dir
         self.num_classes = num_classes
         self.img_exts = img_exts
@@ -41,7 +41,6 @@ class ClassificationDataset(Dataset):
             self._load_samples()
         else:
             raise ValueError(f"Folder {root_dir} not exist")
-        self._print_class_info()
 
     def _load_samples(self):
         class_folders = []
@@ -159,20 +158,6 @@ class ClassificationDataset(Dataset):
             distribution[class_name] = distribution.get(class_name, 0) + 1
         return distribution
 
-    def _print_class_info(self):
-        distribution = self.get_class_distribution()
-        total_samples = len(self.samples)
-
-        print("-" * 50)
-        for class_name, count in distribution.items():
-            percentage = (count / total_samples) * 100
-            print(f"{class_name}: {count} item ({percentage:.1f}%)")
-        print("-" * 50)
-
-        max_count = max(distribution.values())
-        min_count = min(distribution.values())
-        if max_count / min_count > 3:
-            print("Unbalance dataset.")
 
     def get_class_weights(self):
         distribution = self.get_class_distribution()
@@ -201,9 +186,6 @@ def improved_collate_fn(batch):
             continue
         if torch.isnan(img).any() or torch.isinf(img).any():
             print(f"Item {idx}: NaN/Inf")
-            continue
-        if not (0 <= target < 53):
-            print(f"Item {idx}: Invalid label {target}")
             continue
         valid_items.append(item)
 
